@@ -1,0 +1,1201 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gem Cascade</title>
+  <meta name="description" content="Gem Cascade: a match-3 puzzle game in vanilla JavaScript with special gems, cascades and simulator-tuned levels." />
+  <style>
+:root {
+  --bg-1: #1b1035;
+  --bg-2: #2d1b5a;
+  --panel: rgba(255, 255, 255, 0.07);
+  --panel-border: rgba(255, 255, 255, 0.14);
+  --text: #f4efff;
+  --muted: #b8acd9;
+  --accent: #ffcf4a;
+  --cell: 52px;
+  --gap: 4px;
+  font-family: 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background: radial-gradient(circle at 50% 0%, var(--bg-2), var(--bg-1) 70%);
+  background-attachment: fixed;
+  color: var(--text);
+}
+
+body {
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.app {
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+h1 {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: 0.5px;
+  background: linear-gradient(90deg, #ffd56b, #ff7eb6, #8fd3ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.level-name { color: var(--muted); font-weight: bold; }
+
+.hud {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+
+.stat {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 8px 10px;
+  text-align: center;
+}
+
+.stat .label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+.stat .value { font-size: 22px; font-weight: bold; font-variant-numeric: tabular-nums; }
+.stat.low .value { color: #ff8080; }
+
+.progress {
+  position: relative;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  overflow: hidden;
+}
+
+.progress .fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #ffcf4a, #ff7eb6);
+  transition: width 0.4s ease;
+}
+
+.progress .tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.board-wrap {
+  position: relative;
+  align-self: center;
+  padding: 8px;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--panel-border);
+  box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.35);
+  touch-action: none;
+}
+
+.board { position: relative; }
+
+.cell-bg {
+  position: absolute;
+  width: var(--cell);
+  height: var(--cell);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.tile {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--cell);
+  height: var(--cell);
+  padding: calc(var(--cell) * 0.1);
+  cursor: pointer;
+  filter: drop-shadow(0 3px 2px rgba(0, 0, 0, 0.45));
+  transition: transform 0.16s ease;
+  will-change: transform;
+}
+
+.tile.falling { transition: transform 0.28s cubic-bezier(0.3, 0, 0.6, 1.25); }
+.tile.no-anim { transition: none; }
+
+.gem {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.tile.selected .gem { transform: scale(1.15); filter: brightness(1.3); }
+.tile.clearing .gem { transform: scale(0.1) rotate(90deg); opacity: 0; }
+.tile.hint .gem { animation: hint 0.9s ease-in-out infinite; }
+.tile.pop .gem { animation: pop 0.35s ease; }
+
+@keyframes hint { 50% { transform: scale(1.18); } }
+@keyframes pop { 0% { transform: scale(0.4); } 70% { transform: scale(1.25); } 100% { transform: scale(1); } }
+
+/* Six gems with distinct colors AND shapes so they stay readable for color-blind players. */
+.t0 { background: radial-gradient(circle at 35% 30%, #ffb3b3, #ff3b3b 45%, #a3001b); border-radius: 50%; }
+.t1 { background: radial-gradient(circle at 35% 30%, #ffe2b0, #ff9a1f 45%, #b04f00); border-radius: 22%; }
+.t2 { background: radial-gradient(circle at 50% 30%, #fff7b8, #ffd60a 45%, #a88400); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+.t3 { background: radial-gradient(circle at 50% 45%, #c9ffc9, #2fd16a 45%, #0b7a33); clip-path: polygon(50% 4%, 97% 92%, 3% 92%); }
+.t4 { background: radial-gradient(circle at 40% 30%, #c4ecff, #2a9dff 45%, #0047a8); clip-path: polygon(25% 4%, 75% 4%, 100% 50%, 75% 96%, 25% 96%, 0 50%); }
+.t5 { background: radial-gradient(circle at 50% 40%, #f0d0ff, #b44dff 45%, #5c0f99); clip-path: polygon(50% 0, 62% 35%, 100% 38%, 70% 60%, 80% 98%, 50% 76%, 20% 98%, 30% 60%, 0 38%, 38% 35%); }
+
+/* Special gems */
+.line-h .gem::after,
+.line-v .gem::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.75;
+}
+.line-h .gem::after { background: repeating-linear-gradient(0deg, transparent 0 4px, rgba(255, 255, 255, 0.85) 4px 7px); }
+.line-v .gem::after { background: repeating-linear-gradient(90deg, transparent 0 4px, rgba(255, 255, 255, 0.85) 4px 7px); }
+
+.bomb::before {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 12px #fff;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse { 50% { transform: scale(0.9); opacity: 0.6; } }
+
+.rainbow .gem {
+  border-radius: 50%;
+  background: conic-gradient(#ff3b3b, #ff9a1f, #ffd60a, #2fd16a, #2a9dff, #b44dff, #ff3b3b);
+  animation: spin 3s linear infinite;
+}
+.rainbow .gem::after {
+  content: '';
+  position: absolute;
+  inset: 30%;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff, #2d1b5a);
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.controls {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+button {
+  font: inherit;
+  font-weight: bold;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+button:hover { background: rgba(255, 255, 255, 0.14); }
+button.primary { background: linear-gradient(90deg, #ffb52e, #ff6fa8); color: #2a0f3d; border: none; }
+
+.floater {
+  position: absolute;
+  pointer-events: none;
+  font-weight: bold;
+  font-size: 20px;
+  color: var(--accent);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+  animation: float 0.9s ease-out forwards;
+  z-index: 5;
+  white-space: nowrap;
+}
+.floater.combo { font-size: 30px; color: #ff9ad0; }
+@keyframes float {
+  0% { transform: translate(-50%, 0) scale(0.6); opacity: 0; }
+  20% { transform: translate(-50%, -8px) scale(1.1); opacity: 1; }
+  100% { transform: translate(-50%, -48px) scale(1); opacity: 0; }
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 4, 25, 0.7);
+  z-index: 10;
+}
+.overlay.show { display: flex; }
+
+.modal {
+  background: linear-gradient(180deg, #3a2470, #23134a);
+  border: 1px solid var(--panel-border);
+  border-radius: 20px;
+  padding: 24px 28px;
+  text-align: center;
+  width: min(340px, 90vw);
+  animation: pop 0.35s ease;
+}
+.modal h2 { margin: 0 0 6px; }
+.modal p { color: var(--muted); margin: 6px 0 14px; }
+.stars { font-size: 40px; letter-spacing: 6px; margin: 6px 0; }
+.stars .on { color: var(--accent); text-shadow: 0 0 12px rgba(255, 207, 74, 0.7); }
+.stars .off { color: rgba(255, 255, 255, 0.18); }
+.modal .actions { display: flex; gap: 8px; justify-content: center; }
+
+.help { color: var(--muted); font-size: 13px; text-align: center; margin: 0; line-height: 1.5; }
+
+.toast {
+  position: absolute;
+  left: 50%;
+  top: 45%;
+  transform: translate(-50%, -50%);
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.7);
+  font-weight: bold;
+  z-index: 6;
+}
+</style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <h1>Gem Cascade</h1>
+      <span class="level-name" id="levelName">Level 1</span>
+    </header>
+
+    <section class="hud" aria-live="polite">
+      <div class="stat"><div class="label">Score</div><div class="value" id="score">0</div></div>
+      <div class="stat"><div class="label">Target</div><div class="value" id="target">0</div></div>
+      <div class="stat" id="movesStat"><div class="label">Moves</div><div class="value" id="moves">0</div></div>
+    </section>
+
+    <div class="progress" aria-hidden="true">
+      <div class="fill" id="progress"></div>
+      <div class="tick" style="left: 50%"></div>
+      <div class="tick" style="left: 75%"></div>
+    </div>
+
+    <div class="board-wrap">
+      <div class="board" id="board" role="grid" aria-label="Game board"></div>
+    </div>
+
+    <div class="controls">
+      <button id="hintBtn" type="button">Hint</button>
+      <button id="restartBtn" type="button">Restart</button>
+      <button id="soundBtn" type="button" aria-pressed="true">Sound: On</button>
+    </div>
+
+    <p class="help">
+      Swipe or tap two neighbouring gems to swap them. Match 4 for a line gem,
+      an L or T shape for a bomb, and 5 in a row for a rainbow gem that clears a whole color.
+    </p>
+  </main>
+
+  <div class="overlay" id="overlay">
+    <div class="modal">
+      <h2 id="modalTitle">Level complete</h2>
+      <div class="stars" id="modalStars"></div>
+      <p id="modalText"></p>
+      <div class="actions">
+        <button id="retryBtn" type="button">Retry</button>
+        <button id="nextBtn" type="button" class="primary">Next level</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+/*
+ * Gem Cascade core engine.
+ * Pure game logic with no DOM access, so it runs in the browser, in Node tests,
+ * and in the headless level simulator.
+ */
+(function (root) {
+  'use strict';
+
+  const SPECIAL = Object.freeze({
+    NONE: 0,
+    LINE_H: 1, // clears its whole row
+    LINE_V: 2, // clears its whole column
+    BOMB: 3,   // clears the 3x3 area around it
+    RAINBOW: 4,  // clears every gem of one color
+  });
+
+  const RAINBOW_TYPE = -1; // rainbow gems have no color of their own
+
+  // Small, fast, seedable PRNG so games and tests are reproducible.
+  function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function () {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  class Board {
+    constructor(rows, cols, numTypes, rng) {
+      this.rows = rows;
+      this.cols = cols;
+      this.numTypes = numTypes;
+      this.rng = rng || Math.random;
+      this.nextId = 1;
+      this.grid = [];
+      this.fillInitial();
+    }
+
+    /* ---------- creation ---------- */
+
+    newTile(type, special) {
+      return { id: this.nextId++, type, special: special || SPECIAL.NONE };
+    }
+
+    randomType() {
+      return Math.floor(this.rng() * this.numTypes);
+    }
+
+    // Fill the grid so that no match exists at the start and at least one move is possible.
+    fillInitial() {
+      do {
+        this.grid = [];
+        for (let r = 0; r < this.rows; r++) {
+          const row = [];
+          for (let c = 0; c < this.cols; c++) {
+            let type;
+            do {
+              type = this.randomType();
+            } while (
+              (c >= 2 && row[c - 1].type === type && row[c - 2].type === type) ||
+              (r >= 2 && this.grid[r - 1][c].type === type && this.grid[r - 2][c].type === type)
+            );
+            row.push(this.newTile(type));
+          }
+          this.grid.push(row);
+        }
+      } while (!this.findHint());
+    }
+
+    static fromTypes(types, numTypes, rng) {
+      // Build a board from a 2D array of type numbers (used by tests).
+      const b = Object.create(Board.prototype);
+      b.rows = types.length;
+      b.cols = types[0].length;
+      b.numTypes = numTypes;
+      b.rng = rng || mulberry32(1);
+      b.nextId = 1;
+      b.grid = types.map((row) => row.map((t) => b.newTile(t)));
+      return b;
+    }
+
+    clone() {
+      const b = Object.create(Board.prototype);
+      b.rows = this.rows;
+      b.cols = this.cols;
+      b.numTypes = this.numTypes;
+      b.rng = this.rng;
+      b.nextId = this.nextId;
+      b.grid = this.grid.map((row) => row.map((t) => (t ? { ...t } : null)));
+      return b;
+    }
+
+    get(r, c) {
+      return this.inBounds(r, c) ? this.grid[r][c] : null;
+    }
+
+    inBounds(r, c) {
+      return r >= 0 && r < this.rows && c >= 0 && c < this.cols;
+    }
+
+    typesSnapshot() {
+      return this.grid.map((row) => row.map((t) => (t ? t.type : null)));
+    }
+
+    /* ---------- match detection ---------- */
+
+    // Returns match groups. Runs that share a cell are merged (union-find),
+    // which is how L and T shapes are recognised.
+    findMatches() {
+      const runs = [];
+      const sameType = (a, b) => a && b && a.type !== RAINBOW_TYPE && a.type === b.type;
+
+      for (let r = 0; r < this.rows; r++) {
+        let start = 0;
+        for (let c = 1; c <= this.cols; c++) {
+          if (c < this.cols && sameType(this.grid[r][c], this.grid[r][start])) continue;
+          if (c - start >= 3) {
+            const cells = [];
+            for (let k = start; k < c; k++) cells.push([r, k]);
+            runs.push({ dir: 'h', cells });
+          }
+          start = c;
+        }
+      }
+      for (let c = 0; c < this.cols; c++) {
+        let start = 0;
+        for (let r = 1; r <= this.rows; r++) {
+          if (r < this.rows && sameType(this.grid[r][c], this.grid[start][c])) continue;
+          if (r - start >= 3) {
+            const cells = [];
+            for (let k = start; k < r; k++) cells.push([k, c]);
+            runs.push({ dir: 'v', cells });
+          }
+          start = r;
+        }
+      }
+
+      // Union-find over runs that share at least one cell.
+      const parent = runs.map((_, i) => i);
+      const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+      const owner = new Map();
+      runs.forEach((run, i) => {
+        for (const [r, c] of run.cells) {
+          const key = r * this.cols + c;
+          if (owner.has(key)) parent[find(i)] = find(owner.get(key));
+          else owner.set(key, i);
+        }
+      });
+
+      const groups = new Map();
+      runs.forEach((run, i) => {
+        const root = find(i);
+        if (!groups.has(root)) groups.set(root, { runs: [], cells: new Map() });
+        const g = groups.get(root);
+        g.runs.push(run);
+        for (const [r, c] of run.cells) g.cells.set(r * this.cols + c, [r, c]);
+      });
+
+      return [...groups.values()].map((g) => ({
+        runs: g.runs,
+        cells: [...g.cells.values()],
+        type: this.grid[g.runs[0].cells[0][0]][g.runs[0].cells[0][1]].type,
+      }));
+    }
+
+    // Decide which special gem (if any) a match group creates, and where.
+    static specialFor(group, preferred) {
+      const longest = group.runs.reduce((m, run) => Math.max(m, run.cells.length), 0);
+      const hasH = group.runs.some((run) => run.dir === 'h');
+      const hasV = group.runs.some((run) => run.dir === 'v');
+      let special = SPECIAL.NONE;
+      if (longest >= 5) special = SPECIAL.RAINBOW;
+      else if (hasH && hasV) special = SPECIAL.BOMB;
+      else if (longest === 4) special = group.runs[0].dir === 'h' ? SPECIAL.LINE_V : SPECIAL.LINE_H;
+      if (special === SPECIAL.NONE) return null;
+
+      const inGroup = (pos) => pos && group.cells.some(([r, c]) => r === pos[0] && c === pos[1]);
+      let at = (preferred || []).find(inGroup);
+      if (!at && hasH && hasV) {
+        // Intersection of an L or T shape.
+        const counts = new Map();
+        for (const run of group.runs) {
+          for (const [r, c] of run.cells) {
+            const k = r + ',' + c;
+            counts.set(k, (counts.get(k) || 0) + 1);
+          }
+        }
+        for (const [k, n] of counts) if (n > 1) at = k.split(',').map(Number);
+      }
+      if (!at) {
+        const run = group.runs.reduce((a, b) => (b.cells.length > a.cells.length ? b : a));
+        at = run.cells[Math.floor(run.cells.length / 2)];
+      }
+      return { special, at };
+    }
+
+    /* ---------- special effects ---------- */
+
+    // Cells hit by triggering the special gem at (r, c).
+    blastArea(r, c, tile) {
+      const cells = [];
+      if (tile.special === SPECIAL.LINE_H) {
+        for (let k = 0; k < this.cols; k++) cells.push([r, k]);
+      } else if (tile.special === SPECIAL.LINE_V) {
+        for (let k = 0; k < this.rows; k++) cells.push([k, c]);
+      } else if (tile.special === SPECIAL.BOMB) {
+        for (let dr = -1; dr <= 1; dr++)
+          for (let dc = -1; dc <= 1; dc++) if (this.inBounds(r + dr, c + dc)) cells.push([r + dr, c + dc]);
+      } else if (tile.special === SPECIAL.RAINBOW) {
+        const target = this.mostCommonType();
+        cells.push([r, c], ...this.cellsOfType(target));
+      }
+      return cells;
+    }
+
+    cellsOfType(type) {
+      const cells = [];
+      for (let r = 0; r < this.rows; r++)
+        for (let c = 0; c < this.cols; c++) if (this.grid[r][c] && this.grid[r][c].type === type) cells.push([r, c]);
+      return cells;
+    }
+
+    mostCommonType() {
+      const counts = new Array(this.numTypes).fill(0);
+      for (const row of this.grid) for (const t of row) if (t && t.type >= 0) counts[t.type]++;
+      return counts.indexOf(Math.max(...counts));
+    }
+
+    // Breadth-first expansion: any special gem inside the cleared area fires too (chain reactions).
+    expandBlasts(initialKeys) {
+      const cleared = new Set(initialKeys);
+      const queue = [...initialKeys];
+      const fired = new Set();
+      while (queue.length) {
+        const key = queue.shift();
+        const r = Math.floor(key / this.cols);
+        const c = key % this.cols;
+        const tile = this.grid[r][c];
+        if (!tile || tile.special === SPECIAL.NONE || fired.has(key)) continue;
+        fired.add(key);
+        for (const [br, bc] of this.blastArea(r, c, tile)) {
+          const k = br * this.cols + bc;
+          if (!cleared.has(k)) {
+            cleared.add(k);
+            queue.push(k);
+          }
+        }
+      }
+      return cleared;
+    }
+
+    /* ---------- moves ---------- */
+
+    static isAdjacent(a, b) {
+      return Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) === 1;
+    }
+
+    swapCells(a, b) {
+      const t = this.grid[a[0]][a[1]];
+      this.grid[a[0]][a[1]] = this.grid[b[0]][b[1]];
+      this.grid[b[0]][b[1]] = t;
+    }
+
+    isColorSwap(a, b) {
+      return this.get(a[0], a[1]).special === SPECIAL.RAINBOW || this.get(b[0], b[1]).special === SPECIAL.RAINBOW;
+    }
+
+    // A swap is legal if the gems are adjacent and it creates a match or involves a rainbow gem.
+    isValidSwap(a, b) {
+      if (!this.inBounds(a[0], a[1]) || !this.inBounds(b[0], b[1]) || !Board.isAdjacent(a, b)) return false;
+      if (this.isColorSwap(a, b)) return true;
+      this.swapCells(a, b);
+      const ok = this.findMatches().length > 0;
+      this.swapCells(a, b);
+      return ok;
+    }
+
+    // Brute force over every adjacent pair: O(rows * cols) swaps, each with an O(rows * cols) scan.
+    findHint() {
+      for (let r = 0; r < this.rows; r++) {
+        for (let c = 0; c < this.cols; c++) {
+          if (c + 1 < this.cols && this.isValidSwap([r, c], [r, c + 1])) return [[r, c], [r, c + 1]];
+          if (r + 1 < this.rows && this.isValidSwap([r, c], [r + 1, c])) return [[r, c], [r + 1, c]];
+        }
+      }
+      return null;
+    }
+
+    allValidSwaps() {
+      const swaps = [];
+      for (let r = 0; r < this.rows; r++) {
+        for (let c = 0; c < this.cols; c++) {
+          if (c + 1 < this.cols && this.isValidSwap([r, c], [r, c + 1])) swaps.push([[r, c], [r, c + 1]]);
+          if (r + 1 < this.rows && this.isValidSwap([r, c], [r + 1, c])) swaps.push([[r, c], [r + 1, c]]);
+        }
+      }
+      return swaps;
+    }
+
+    /* ---------- resolution ---------- */
+
+    // Collapse each column downward, then refill from the top.
+    // Returns the ids of newly spawned tiles with how far above the board they start.
+    applyGravity() {
+      const spawned = [];
+      for (let c = 0; c < this.cols; c++) {
+        let write = this.rows - 1;
+        for (let r = this.rows - 1; r >= 0; r--) {
+          if (this.grid[r][c]) {
+            const t = this.grid[r][c];
+            this.grid[r][c] = null;
+            this.grid[write][c] = t;
+            write--;
+          }
+        }
+        const missing = write + 1;
+        for (let r = write; r >= 0; r--) {
+          const t = this.newTile(this.randomType());
+          this.grid[r][c] = t;
+          spawned.push({ id: t.id, row: r, col: c, from: r - missing });
+        }
+      }
+      return spawned;
+    }
+
+    // Performs a swap and resolves every cascade.
+    // Returns animation-ready steps, or null when the swap is illegal.
+    playSwap(a, b) {
+      if (!this.isValidSwap(a, b)) return null;
+      this.swapCells(a, b);
+      const steps = [];
+      let cascade = 0;
+
+      if (this.isColorSwap(a, b)) {
+        const ta = this.get(a[0], a[1]);
+        const tb = this.get(b[0], b[1]);
+        let keys;
+        if (ta.special === SPECIAL.RAINBOW && tb.special === SPECIAL.RAINBOW) {
+          keys = [];
+          for (let k = 0; k < this.rows * this.cols; k++) keys.push(k);
+        } else {
+          const rainbowPos = ta.special === SPECIAL.RAINBOW ? a : b;
+          const other = ta.special === SPECIAL.RAINBOW ? tb : ta;
+          keys = [rainbowPos, ...this.cellsOfType(other.type)].map(([r, c]) => r * this.cols + c);
+        }
+        // Mark the rainbow gem as spent so it doesn't fire a second time.
+        const rainbow = ta.special === SPECIAL.RAINBOW ? ta : tb;
+        rainbow.special = SPECIAL.NONE;
+        steps.push(this.clearAndCollapse(this.expandBlasts(keys), [], ++cascade));
+      }
+
+      let preferred = [b, a];
+      for (;;) {
+        const groups = this.findMatches();
+        if (!groups.length) break;
+        const creations = groups.map((g) => Board.specialFor(g, preferred)).filter(Boolean);
+        const keys = [];
+        for (const g of groups) for (const [r, c] of g.cells) keys.push(r * this.cols + c);
+        steps.push(this.clearAndCollapse(this.expandBlasts(keys), creations, ++cascade, groups));
+        preferred = [];
+      }
+
+      let shuffled = false;
+      if (!this.findHint()) {
+        this.shuffle();
+        shuffled = true;
+      }
+      return { steps, shuffled };
+    }
+
+    clearAndCollapse(clearedKeys, creations, cascade, groups) {
+      const created = [];
+      const keep = new Set();
+      for (const { special, at } of creations) {
+        const k = at[0] * this.cols + at[1];
+        const tile = this.grid[at[0]][at[1]];
+        if (!tile || keep.has(k)) continue;
+        keep.add(k);
+        tile.special = special;
+        if (special === SPECIAL.RAINBOW) tile.type = RAINBOW_TYPE;
+        created.push({ id: tile.id, special, row: at[0], col: at[1] });
+      }
+
+      const clearedIds = [];
+      for (const k of clearedKeys) {
+        if (keep.has(k)) continue;
+        const r = Math.floor(k / this.cols);
+        const c = k % this.cols;
+        if (this.grid[r][c]) {
+          clearedIds.push(this.grid[r][c].id);
+          this.grid[r][c] = null;
+        }
+      }
+
+      const points = clearedIds.length * 10 * cascade + created.length * 50;
+      const spawned = this.applyGravity();
+      return {
+        cascade,
+        clearedIds,
+        created,
+        spawned,
+        points,
+        matchCount: groups ? groups.length : 0,
+        positions: this.positions(),
+      };
+    }
+
+    // id -> [row, col] for every tile, used by the UI to animate.
+    positions() {
+      const map = {};
+      for (let r = 0; r < this.rows; r++)
+        for (let c = 0; c < this.cols; c++) {
+          const t = this.grid[r][c];
+          map[t.id] = { row: r, col: c, type: t.type, special: t.special };
+        }
+      return map;
+    }
+
+    // Fisher-Yates shuffle until the board has no matches and at least one move.
+    shuffle() {
+      const tiles = this.grid.flat();
+      for (let attempt = 0; attempt < 100; attempt++) {
+        for (let i = tiles.length - 1; i > 0; i--) {
+          const j = Math.floor(this.rng() * (i + 1));
+          [tiles[i], tiles[j]] = [tiles[j], tiles[i]];
+        }
+        for (let r = 0; r < this.rows; r++)
+          for (let c = 0; c < this.cols; c++) this.grid[r][c] = tiles[r * this.cols + c];
+        if (!this.findMatches().length && this.findHint()) return;
+      }
+      this.fillInitial();
+    }
+  }
+
+  /* ---------- game session (levels, moves, score, stars) ---------- */
+
+  const LEVELS = [
+    // Targets tuned with scripts/simulate.js (see README for the results table).
+    { name: 'Level 1', rows: 8, cols: 8, types: 5, moves: 20, target: 3000 },
+    { name: 'Level 2', rows: 8, cols: 8, types: 6, moves: 24, target: 3000 },
+    { name: 'Level 3', rows: 9, cols: 9, types: 6, moves: 24, target: 4500 },
+  ];
+
+  class Game {
+    constructor(levelIndex, seed) {
+      this.levelIndex = levelIndex || 0;
+      this.level = LEVELS[this.levelIndex];
+      this.rng = mulberry32(seed == null ? Date.now() : seed);
+      this.board = new Board(this.level.rows, this.level.cols, this.level.types, this.rng);
+      this.score = 0;
+      this.movesLeft = this.level.moves;
+      this.bestCascade = 0;
+    }
+
+    get stars() {
+      const t = this.level.target;
+      if (this.score >= t * 2) return 3;
+      if (this.score >= t * 1.5) return 2;
+      if (this.score >= t) return 1;
+      return 0;
+    }
+
+    get over() {
+      return this.movesLeft <= 0;
+    }
+
+    get won() {
+      return this.score >= this.level.target;
+    }
+
+    move(a, b) {
+      if (this.over) return null;
+      const result = this.board.playSwap(a, b);
+      if (!result) return null;
+      this.movesLeft--;
+      for (const step of result.steps) {
+        this.score += step.points;
+        this.bestCascade = Math.max(this.bestCascade, step.cascade);
+      }
+      return result;
+    }
+  }
+
+  const api = { SPECIAL, RAINBOW_TYPE, LEVELS, Board, Game, mulberry32 };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.GemCascade = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+  <script>
+/*
+ * Gem Cascade browser UI.
+ * Renders the board as absolutely positioned DOM tiles and animates the
+ * steps returned by the core engine (swap, clear, create specials, fall).
+ */
+(function () {
+  'use strict';
+
+  const { Game, LEVELS, SPECIAL } = window.GemCascade;
+
+  const T = { swap: 170, clear: 220, fall: 300, pause: 60 };
+  const COMBO_WORDS = ['', '', 'Nice!', 'Great!', 'Amazing!', 'Spectacular!'];
+
+  const $ = (id) => document.getElementById(id);
+  const boardEl = $('board');
+  const els = {
+    score: $('score'),
+    target: $('target'),
+    moves: $('moves'),
+    movesStat: $('movesStat'),
+    progress: $('progress'),
+    levelName: $('levelName'),
+    overlay: $('overlay'),
+    modalTitle: $('modalTitle'),
+    modalStars: $('modalStars'),
+    modalText: $('modalText'),
+    nextBtn: $('nextBtn'),
+    retryBtn: $('retryBtn'),
+  };
+
+  let game;
+  let levelIndex = 0;
+  let busy = false;
+  let selected = null;
+  let cell = 52;
+  let hintTimer = null;
+  let soundOn = true;
+  const tiles = new Map(); // tile id -> element
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const nextFrame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+  /* ---------- sound (tiny WebAudio blips, no assets needed) ---------- */
+
+  let audio = null;
+  function beep(freq, duration, type) {
+    if (!soundOn) return;
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audio.createOscillator();
+      const gain = audio.createGain();
+      osc.type = type || 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.08, audio.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + duration);
+      osc.connect(gain).connect(audio.destination);
+      osc.start();
+      osc.stop(audio.currentTime + duration);
+    } catch (e) {
+      soundOn = false;
+    }
+  }
+
+  /* ---------- layout ---------- */
+
+  function computeCellSize() {
+    const maxBoard = Math.min(window.innerWidth - 48, 500);
+    cell = Math.floor(Math.min(56, maxBoard / game.board.cols));
+    document.documentElement.style.setProperty('--cell', cell + 'px');
+    boardEl.style.width = cell * game.board.cols + 'px';
+    boardEl.style.height = cell * game.board.rows + 'px';
+  }
+
+  function place(el, row, col) {
+    el.style.transform = `translate(${col * cell}px, ${row * cell}px)`;
+  }
+
+  function decorate(el, info) {
+    el.className = 'tile';
+    el.firstChild.className = 'gem' + (info.type >= 0 ? ' t' + info.type : '');
+    if (info.special === SPECIAL.LINE_H) el.classList.add('line-h');
+    if (info.special === SPECIAL.LINE_V) el.classList.add('line-v');
+    if (info.special === SPECIAL.BOMB) el.classList.add('bomb');
+    if (info.special === SPECIAL.RAINBOW) el.classList.add('rainbow');
+  }
+
+  function makeTile(id, info) {
+    const el = document.createElement('div');
+    el.appendChild(document.createElement('div'));
+    el.dataset.id = id;
+    decorate(el, info);
+    boardEl.appendChild(el);
+    tiles.set(Number(id), el);
+    return el;
+  }
+
+  function renderAll() {
+    boardEl.innerHTML = '';
+    tiles.clear();
+    computeCellSize();
+    for (let r = 0; r < game.board.rows; r++) {
+      for (let c = 0; c < game.board.cols; c++) {
+        const bg = document.createElement('div');
+        bg.className = 'cell-bg';
+        bg.style.transform = `translate(${c * cell}px, ${r * cell}px) scale(0.94)`;
+        boardEl.appendChild(bg);
+      }
+    }
+    const pos = game.board.positions();
+    for (const id in pos) {
+      const el = makeTile(id, pos[id]);
+      el.classList.add('no-anim');
+      place(el, pos[id].row, pos[id].col);
+    }
+    requestAnimationFrame(() => tiles.forEach((el) => el.classList.remove('no-anim')));
+  }
+
+  function updateHud() {
+    const { score, movesLeft, level } = game;
+    els.score.textContent = score.toLocaleString();
+    els.target.textContent = level.target.toLocaleString();
+    els.moves.textContent = movesLeft;
+    els.movesStat.classList.toggle('low', movesLeft <= 5);
+    els.levelName.textContent = level.name;
+    // Bar is full at 2x target (3 stars); ticks mark 1.5x (2 stars) and 1x via the 50% mark.
+    els.progress.style.width = Math.min(100, (score / (level.target * 2)) * 100) + '%';
+  }
+
+  /* ---------- feedback ---------- */
+
+  function floater(text, row, col, combo) {
+    const el = document.createElement('div');
+    el.className = 'floater' + (combo ? ' combo' : '');
+    el.textContent = text;
+    el.style.left = (col + 0.5) * cell + 'px';
+    el.style.top = row * cell + 'px';
+    boardEl.appendChild(el);
+    setTimeout(() => el.remove(), 950);
+  }
+
+  async function toast(text) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = text;
+    boardEl.appendChild(el);
+    await sleep(900);
+    el.remove();
+  }
+
+  function clearHint() {
+    clearTimeout(hintTimer);
+    tiles.forEach((el) => el.classList.remove('hint'));
+  }
+
+  function showHint() {
+    clearHint();
+    const hint = game.board.findHint();
+    if (!hint) return;
+    for (const [r, c] of hint) tiles.get(game.board.grid[r][c].id).classList.add('hint');
+  }
+
+  function scheduleHint() {
+    clearHint();
+    hintTimer = setTimeout(() => !busy && !game.over && showHint(), 7000);
+  }
+
+  /* ---------- turn animation ---------- */
+
+  function tileAt(pos) {
+    return tiles.get(game.board.grid[pos[0]][pos[1]].id);
+  }
+
+  async function animateSwap(a, b, elA, elB) {
+    place(elA, b[0], b[1]);
+    place(elB, a[0], a[1]);
+    await sleep(T.swap);
+  }
+
+  async function playStep(step) {
+    // 1. Clear matched and blasted gems.
+    for (const id of step.clearedIds) {
+      const el = tiles.get(id);
+      if (el) el.classList.add('clearing');
+    }
+    beep(400 + step.cascade * 120, 0.12, 'triangle');
+    await sleep(T.clear);
+    for (const id of step.clearedIds) {
+      const el = tiles.get(id);
+      if (el) el.remove();
+      tiles.delete(id);
+    }
+
+    // 2. Upgrade gems that became specials.
+    for (const c of step.created) {
+      const el = tiles.get(c.id);
+      if (!el) continue;
+      decorate(el, step.positions[c.id]);
+      el.classList.add('pop');
+      beep(880, 0.2, 'square');
+    }
+
+    // 3. Spawn new gems above the board, then let everything fall.
+    for (const s of step.spawned) {
+      const el = makeTile(s.id, step.positions[s.id]);
+      el.classList.add('no-anim');
+      place(el, s.from, s.col);
+    }
+    await nextFrame();
+    for (const [id, el] of tiles) {
+      const p = step.positions[id];
+      if (!p) continue;
+      el.classList.remove('no-anim');
+      el.classList.add('falling');
+      place(el, p.row, p.col);
+    }
+
+    const mid = Math.floor(game.board.cols / 2);
+    floater('+' + step.points, 3, mid, false);
+    if (step.cascade >= 2) floater(COMBO_WORDS[Math.min(step.cascade, 5)], 1.5, mid, true);
+    updateHudPartial(step.points);
+
+    await sleep(T.fall);
+    tiles.forEach((el) => el.classList.remove('falling', 'pop'));
+    await sleep(T.pause);
+  }
+
+  let shownScore = 0;
+  function updateHudPartial(points) {
+    shownScore += points;
+    els.score.textContent = shownScore.toLocaleString();
+    els.progress.style.width = Math.min(100, (shownScore / (game.level.target * 2)) * 100) + '%';
+  }
+
+  async function trySwap(a, b) {
+    if (busy || game.over) return;
+    busy = true;
+    clearHint();
+    deselect();
+    const elA = tileAt(a);
+    const elB = tileAt(b);
+
+    if (!game.board.isValidSwap(a, b)) {
+      beep(160, 0.15, 'sawtooth');
+      await animateSwap(a, b, elA, elB);
+      place(elA, a[0], a[1]);
+      place(elB, b[0], b[1]);
+      await sleep(T.swap);
+      busy = false;
+      scheduleHint();
+      return;
+    }
+
+    await animateSwap(a, b, elA, elB);
+    shownScore = game.score;
+    const result = game.move(a, b);
+    els.moves.textContent = game.movesLeft;
+    els.movesStat.classList.toggle('low', game.movesLeft <= 5);
+    for (const step of result.steps) await playStep(step);
+
+    if (result.shuffled) {
+      await toast('No moves left, shuffling');
+      renderAll();
+    }
+    updateHud();
+    busy = false;
+
+    if (game.over) endLevel();
+    else scheduleHint();
+  }
+
+  /* ---------- end of level ---------- */
+
+  function endLevel() {
+    const stars = game.stars;
+    const won = game.won;
+    els.modalTitle.textContent = won ? 'Level complete!' : 'Out of moves';
+    els.modalStars.innerHTML = [1, 2, 3]
+      .map((n) => `<span class="${n <= stars ? 'on' : 'off'}">★</span>`)
+      .join('');
+    els.modalText.textContent = won
+      ? `You scored ${game.score.toLocaleString()} points with a best combo of x${game.bestCascade}.`
+      : `You scored ${game.score.toLocaleString()} of ${game.level.target.toLocaleString()} points. Try again!`;
+    const last = levelIndex === LEVELS.length - 1;
+    els.nextBtn.style.display = won ? '' : 'none';
+    els.nextBtn.textContent = last ? 'Play again' : 'Next level';
+    els.overlay.classList.add('show');
+    beep(won ? 660 : 220, 0.4, 'triangle');
+  }
+
+  function startLevel(index) {
+    levelIndex = index;
+    game = new Game(levelIndex);
+    shownScore = 0;
+    els.overlay.classList.remove('show');
+    busy = false;
+    deselect();
+    renderAll();
+    updateHud();
+    scheduleHint();
+  }
+
+  /* ---------- input: swipe or tap-tap ---------- */
+
+  function cellFromEvent(e) {
+    const rect = boardEl.getBoundingClientRect();
+    const col = Math.floor((e.clientX - rect.left) / cell);
+    const row = Math.floor((e.clientY - rect.top) / cell);
+    return game.board.inBounds(row, col) ? [row, col] : null;
+  }
+
+  function deselect() {
+    if (selected) {
+      const el = tiles.get(game.board.grid[selected[0]][selected[1]].id);
+      if (el) el.classList.remove('selected');
+    }
+    selected = null;
+  }
+
+  let drag = null;
+
+  boardEl.addEventListener('pointerdown', (e) => {
+    if (busy || game.over) return;
+    const pos = cellFromEvent(e);
+    if (!pos) return;
+    drag = { pos, x: e.clientX, y: e.clientY, swiped: false };
+    boardEl.setPointerCapture(e.pointerId);
+  });
+
+  boardEl.addEventListener('pointermove', (e) => {
+    if (!drag || drag.swiped) return;
+    const dx = e.clientX - drag.x;
+    const dy = e.clientY - drag.y;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < cell * 0.35) return;
+    drag.swiped = true;
+    const [r, c] = drag.pos;
+    const target = Math.abs(dx) > Math.abs(dy) ? [r, c + Math.sign(dx)] : [r + Math.sign(dy), c];
+    if (game.board.inBounds(target[0], target[1])) trySwap(drag.pos, target);
+  });
+
+  boardEl.addEventListener('pointerup', () => {
+    if (!drag) return;
+    const { pos, swiped } = drag;
+    drag = null;
+    if (swiped || busy) return;
+    if (selected && Math.abs(selected[0] - pos[0]) + Math.abs(selected[1] - pos[1]) === 1) {
+      trySwap(selected, pos);
+    } else if (selected && selected[0] === pos[0] && selected[1] === pos[1]) {
+      deselect();
+    } else {
+      deselect();
+      selected = pos;
+      tileAt(pos).classList.add('selected');
+      beep(520, 0.05);
+    }
+  });
+
+  /* ---------- buttons ---------- */
+
+  $('hintBtn').addEventListener('click', () => !busy && showHint());
+  $('restartBtn').addEventListener('click', () => !busy && startLevel(levelIndex));
+  $('retryBtn').addEventListener('click', () => startLevel(levelIndex));
+  els.nextBtn.addEventListener('click', () => startLevel((levelIndex + 1) % LEVELS.length));
+  $('soundBtn').addEventListener('click', (e) => {
+    soundOn = !soundOn;
+    e.target.textContent = 'Sound: ' + (soundOn ? 'On' : 'Off');
+    e.target.setAttribute('aria-pressed', String(soundOn));
+  });
+
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => !busy && renderAll(), 150);
+  });
+
+  startLevel(0);
+})();
+</script>
+</body>
+</html>

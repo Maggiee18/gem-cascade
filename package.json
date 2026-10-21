@@ -1,0 +1,16 @@
+{
+  "name": "gem-cascade",
+  "version": "1.0.0",
+  "description": "Match-3 puzzle game in vanilla JavaScript with special gems, cascades and simulator-tuned levels.",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "simulate": "node scripts/simulate.js 200",
+    "build": "node scripts/build.js",
+    "start": "npx --yes serve ."
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

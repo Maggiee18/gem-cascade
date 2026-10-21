@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gem Cascade</title>
+  <meta name="description" content="Gem Cascade: a match-3 puzzle game in vanilla JavaScript with special gems, cascades and simulator-tuned levels." />
+  <link rel="stylesheet" href="src/styles.css" />
+</head>
+<body>
+  <main class="app">
+    <header>
+      <h1>Gem Cascade</h1>
+      <span class="level-name" id="levelName">Level 1</span>
+    </header>
+
+    <section class="hud" aria-live="polite">
+      <div class="stat"><div class="label">Score</div><div class="value" id="score">0</div></div>
+      <div class="stat"><div class="label">Target</div><div class="value" id="target">0</div></div>
+      <div class="stat" id="movesStat"><div class="label">Moves</div><div class="value" id="moves">0</div></div>
+    </section>
+
+    <div class="progress" aria-hidden="true">
+      <div class="fill" id="progress"></div>
+      <div class="tick" style="left: 50%"></div>
+      <div class="tick" style="left: 75%"></div>
+    </div>
+
+    <div class="board-wrap">
+      <div class="board" id="board" role="grid" aria-label="Game board"></div>
+    </div>
+
+    <div class="controls">
+      <button id="hintBtn" type="button">Hint</button>
+      <button id="restartBtn" type="button">Restart</button>
+      <button id="soundBtn" type="button" aria-pressed="true">Sound: On</button>
+    </div>
+
+    <p class="help">
+      Swipe or tap two neighbouring gems to swap them. Match 4 for a line gem,
+      an L or T shape for a bomb, and 5 in a row for a rainbow gem that clears a whole color.
+    </p>
+  </main>
+
+  <div class="overlay" id="overlay">
+    <div class="modal">
+      <h2 id="modalTitle">Level complete</h2>
+      <div class="stars" id="modalStars"></div>
+      <p id="modalText"></p>
+      <div class="actions">
+        <button id="retryBtn" type="button">Retry</button>
+        <button id="nextBtn" type="button" class="primary">Next level</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="src/core.js"></script>
+  <script src="src/ui.js"></script>
+</body>
+</html>
