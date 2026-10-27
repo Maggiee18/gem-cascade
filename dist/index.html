@@ -203,9 +203,12 @@ h1 {
 
 .controls {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   justify-content: center;
 }
+.controls button,
+.controls a { white-space: nowrap; }
 
 button {
   font: inherit;
@@ -219,6 +222,17 @@ button {
 }
 button:hover { background: rgba(255, 255, 255, 0.14); }
 button.primary { background: linear-gradient(90deg, #ffb52e, #ff6fa8); color: #2a0f3d; border: none; }
+.mode-link {
+  display: inline-flex;
+  align-items: center;
+  font-weight: bold;
+  color: #2a0f3d;
+  background: linear-gradient(90deg, #8fd3ff, #ff7eb6);
+  border-radius: 999px;
+  padding: 8px 16px;
+  text-decoration: none;
+}
+.mode-link:hover { filter: brightness(1.1); }
 
 .floater {
   position: absolute;
@@ -307,6 +321,7 @@ button.primary { background: linear-gradient(90deg, #ffb52e, #ff6fa8); color: #2
       <button id="hintBtn" type="button">Hint</button>
       <button id="restartBtn" type="button">Restart</button>
       <button id="soundBtn" type="button" aria-pressed="true">Sound: On</button>
+      <a class="mode-link" href="../3d/">Play in 3D</a>
     </div>
 
     <p class="help">

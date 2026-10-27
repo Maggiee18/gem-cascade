@@ -14,6 +14,8 @@ html = html.replace(
   '<link rel="stylesheet" href="src/styles.css" />',
   () => `<style>\n${read('src/styles.css')}</style>`
 );
+// dist/index.html lives one folder down, so point the 3D link back up.
+html = html.replace('href="3d/"', 'href="../3d/"');
 html = html.replace(/<script src="(src\/[\w.]+)"><\/script>/g, (_, file) => `<script>\n${read(file)}</script>`);
 
 fs.mkdirSync(path.join(root, 'dist'), { recursive: true });

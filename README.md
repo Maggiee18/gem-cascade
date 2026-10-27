@@ -1,10 +1,12 @@
 # Gem Cascade
 
-A match-3 puzzle game built from scratch in vanilla JavaScript. Swap gems, set off chain reactions with special gems, and beat three levels whose difficulty was tuned with a headless bot simulator.
+A match-3 puzzle game built from scratch in vanilla JavaScript. Swap gems, set off chain reactions with special gems, and beat three levels whose difficulty was tuned with a headless bot simulator. It comes in two versions that share one game engine: a lightweight 2D DOM version and a 3D version rendered with Three.js.
 
-**Play it:** `https://maggiee18.github.io/gem-cascade/`
+**Play it:** [2D version](https://maggiee18.github.io/gem-cascade/) · [3D version](https://maggiee18.github.io/gem-cascade/3d/)
 
-![Gem Cascade gameplay](docs/screenshot.png)
+| 2D | 3D |
+|---|---|
+| ![Gem Cascade 2D gameplay](docs/screenshot.png) | ![Gem Cascade 3D gameplay](docs/screenshot-3d.png) |
 
 ## Features
 
@@ -18,8 +20,9 @@ A match-3 puzzle game built from scratch in vanilla JavaScript. Swap gems, set o
 * **Three levels** with move limits, score targets and a 1 to 3 star rating
 * **Hints and auto shuffle.** The game suggests a move after 7 seconds of no input and reshuffles when no legal move is left
 * **Accessible gem design.** Each color also has its own shape, so the board stays readable for color blind players
+* **3D mode** built with Three.js: lit 3D gems with one shape per color, a tilted board, particle bursts, shockwaves when specials fire and a subtle camera parallax
 * **Sound effects** generated with the Web Audio API, so the game ships no audio files
-* **No dependencies.** No frameworks, no bundler and no npm packages
+* **No frameworks or bundler.** The 2D game has no dependencies at all. The 3D version only adds Three.js, loaded from a CDN with a pinned version
 
 ## How it works
 
@@ -29,11 +32,13 @@ The project keeps game logic and rendering fully separate.
 src/core.js     Pure game engine: board, matching, specials, gravity, scoring, levels
 src/ui.js       DOM renderer, animation queue and input handling
 src/styles.css  Gem shapes, special gem effects and animations
+3d/game3d.js    Three.js renderer that plays the same engine steps in 3D
+3d/index.html   Page for the 3D version
 scripts/        Level balancing simulator and single file build
 test/           Unit tests for the engine
 ```
 
-`core.js` has no DOM access, so the same code runs in the browser, in the unit tests and in the simulator.
+`core.js` has no DOM access, so the same code runs in the browser, in the unit tests, in the simulator and behind both the 2D and 3D renderers.
 
 ### Turn resolution
 
@@ -48,6 +53,16 @@ A swap goes through a loop that repeats until the board is stable:
 7. **Repeat** for the next cascade with a higher multiplier
 
 The engine returns each cascade as an animation step (cleared tile ids, created specials, spawned tiles and new positions). The UI plays these steps in order with CSS transforms, which keeps rendering smooth without a canvas or game library.
+
+### The 3D renderer
+
+The 3D version does not touch the game rules. It reads the same animation steps from `core.js` and turns them into tweens on Three.js objects instead of CSS transforms.
+
+* **Gems** are real meshes (sphere, rounded cube, octahedron, triangular pyramid, hexagonal prism and extruded star) with physically based materials lit by a room environment map
+* **Specials** are drawn as glowing rings: horizontal or vertical for line gems, two spinning rings for bombs, and orbiting colored orbs around an iridescent rainbow gem
+* **Input** casts a ray from the camera onto the board plane, so taps and swipes map to the right cell even though the board is tilted
+* **Falling gems** spawn above the board and are hidden by a clipping plane until they cross the top edge
+* **Effects** include particle bursts in each gem's color, shockwaves sized to the blast area and a short camera shake, all turned down when the player prefers reduced motion
 
 ### Fair boards
 
@@ -86,7 +101,7 @@ Requires Node.js 18 or newer for the tests and scripts. The game itself needs on
 git clone https://github.com/Maggiee18/gem-cascade.git
 cd gem-cascade
 
-# Play: open index.html in a browser, or serve the folder
+# Play: serve the folder, then open / for 2D or /3d/ for 3D
 npx serve .
 
 # Run the unit tests (Node's built-in test runner)
@@ -126,7 +141,6 @@ GitHub Actions runs the tests, a short simulation and the build on every push.
 * Obstacle tiles (ice, locked gems) and level goals beyond score
 * A level editor that saves layouts as JSON
 * Saved progress and best scores
-* A canvas renderer for larger boards
 
 ## License
 
